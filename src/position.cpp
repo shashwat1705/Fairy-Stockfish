@@ -1876,6 +1876,7 @@ bool Position::see_ge(Move m, Value threshold) const {
   Bitboard attackers = attackers_to(to, occupied);
   Bitboard stmAttackers, bb;
   int res = 1;
+  bool gatingAttack = is_gating(m) && (attacks_from(stm, gating_type(m), from) & to);
 
   // Flying general rule
   if (var->flyingGeneral)
@@ -1896,7 +1897,7 @@ bool Position::see_ge(Move m, Value threshold) const {
       attackers &= occupied;
 
       // If stm has no more attackers then give up: stm loses
-      if (!(stmAttackers = attackers & pieces(stm)))
+      if (!(stmAttackers = attackers & pieces(stm)) && !(gatingAttack && stm == sideToMove))
           break;
 
       // Don't allow pinned pieces to attack (except the king) as long as
@@ -1904,7 +1905,7 @@ bool Position::see_ge(Move m, Value threshold) const {
       if (pinners(~stm) & occupied)
           stmAttackers &= ~blockers_for_king(stm);
 
-      if (!stmAttackers)
+      if (!stmAttackers && !(gatingAttack && stm == sideToMove))
           break;
 
       res ^= 1;
@@ -1966,10 +1967,19 @@ bool Position::see_ge(Move m, Value threshold) const {
           occupied ^= lsb(bb);
       }
 
+      // Consider gating piece
+      else if (gatingAttack && stm == sideToMove)
+      {
+          if ((swap = PieceValue[MG][gating_type(m)] - swap) < res)
+              break;
+
+          gatingAttack = false;
+      }
+
       else // KING
            // If we "capture" with the king but opponent still has attackers,
            // reverse the result.
-          return (attackers & ~pieces(stm)) || (is_gating(m) && ~stm == sideToMove && (attacks_from(stm, gating_type(m), from) & to)) ? res ^ 1 : res;
+          return (attackers & ~pieces(stm)) || (gatingAttack && ~stm == sideToMove) ? res ^ 1 : res;
   }
 
   return bool(res);
